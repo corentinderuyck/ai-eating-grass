@@ -38,8 +38,24 @@ def main() :
 
         # avance de 1 l'itération
         nextIter(map)
+
+        # vérifie si on a que de l'herbe
+        if(checkIfOnlyGrass(map)) :
+            # on regenere la map
+            map = generateMap()
         
     pygame.quit()
+
+def checkIfOnlyGrass(map) :
+    """
+    Vérifie si il n'y a que de l'herbe
+    """
+
+    for y in range(len(map)) :
+        for x in range(len(map[0])) :
+            if map[y][x] != 1 :
+                return False
+    return True
 
 def nextIter(map) :
     """
