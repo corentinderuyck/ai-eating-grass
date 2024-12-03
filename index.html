@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cow and Grass Ecosystem Simulation</title>
+    <style>
+        /* Full-page layout with sidebar */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            font-family: Arial, sans-serif;
+        }
+        #simulationCanvas {
+            flex-grow: 1;
+            background-color: black;
+        }
+        #sidebar {
+            width: 250px;
+            background-color: #f0f0f0;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        .control-group {
+            margin-bottom: 20px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group .value-display {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        #resetButton {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 10px 0;
+        }
+        #resetButton:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Ecosystem Parameters</h2>
+        <button id="resetButton">Reset Simulation</button>
+        <div id="controls"></div>
+    </div>
+    <canvas id="simulationCanvas"></canvas>
+
+    <script>
+        // Cow class representing individual animals in the ecosystem
+        class Cow {
+            constructor(initialEnergy) {
+                // Initial energy level for the cow
+                this.energy = initialEnergy;
+            }
+
+            // Check if cow has enough energy to reproduce
+            canMakeBaby(energyThreshold) {
+                return this.energy >= energyThreshold;
+            }
+
+            // Reduce energy with each iteration
+            reduceEnergy(energyLoss) {
+                this.energy -= energyLoss;
+            }
+
+            // Check if cow has died (no energy left)
+            noEnergy() {
+                return this.energy <= 0;
+            }
+
+            // Increase energy when eating grass
+            increaseEnergy(energyGain) {
+                this.energy += energyGain;
+            }
+        }
+
+        // Main simulation class managing the ecosystem
+        class CowGrassSimulation {
+            constructor() {
+                // Canvas setup
+                this.canvas = document.getElementById('simulationCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Adjust canvas size to screen minus sidebar
+                this.canvas.width = window.innerWidth - 250;
+                this.canvas.height = window.innerHeight;
+
+                // Simulation parameters with default values
+                this.parameters = {
+                    CELL_SIZE: 5,
+                    PROBA_COW_INIT: 10,      // Initial probability of cow generation
+                    PROBA_GRASS_INIT: 40,     // Initial probability of grass generation
+                    COW_ENERGY_INIT: 4,       // Starting energy for cows
+                    COW_ENERGY_TO_MAKE_BABY: 5, // Energy needed to reproduce
+                    COW_LOSS_ENERGY_STEP: 1,  // Energy lost per iteration
+                    COW_INCREASE_ENERGY_EAT: 2, // Energy gained by eating grass
+                    PROBA_GRASS_GROW: 10,     // Probability of grass spreading
+                    TICK: 50                  // Simulation speed
+                };
+
+                // Initialize simulation components
+                this.createParameterControls();
+                this.setupResetButton();
+                this.gameMap = this.generateMap();
+                this.startSimulation();
+            }
+
+            // Create interactive sidebar controls
+            createParameterControls() {
+                const controlsDiv = document.getElementById('controls');
+                
+                Object.keys(this.parameters).forEach(key => {
+                    const controlGroup = document.createElement('div');
+                    controlGroup.className = 'control-group';
+
+                    // Create label with readable text
+                    const label = document.createElement('label');
+                    label.textContent = key.replace(/_/g, ' ');
+                    label.htmlFor = key;
+
+                    // Create range input
+                    const input = document.createElement('input');
+                    input.type = 'range';
+                    input.id = key;
+                    input.name = key;
+                    
+                    // Different ranges for different parameters
+                    input.min = key === 'TICK' ? 10 : 1;
+                    input.max = key === 'TICK' ? 200 : 100;
+                    input.value = this.parameters[key];
+
+                    // Value display
+                    const valueDisplay = document.createElement('div');
+                    valueDisplay.className = 'value-display';
+                    valueDisplay.textContent = this.parameters[key];
+
+                    // Update parameters in real-time
+                    input.addEventListener('input', (e) => {
+                        this.parameters[key] = parseInt(e.target.value);
+                        valueDisplay.textContent = e.target.value;
+                        
+                        // Restart simulation if tick changes
+                        if (key === 'TICK') {
+                            clearInterval(this.simulationInterval);
+                            this.startSimulation();
+                        }
+
+                        // Regenerate all if size pixel changes
+                        if (key === 'CELL_SIZE') {
+                            this.gameMap = this.generateMap();
+                        }
+                    });
+
+                    controlGroup.appendChild(label);
+                    controlGroup.appendChild(input);
+                    controlGroup.appendChild(valueDisplay);
+                    controlsDiv.appendChild(controlGroup);
+                });
+            }
+
+            // Reset button to regenerate map
+            setupResetButton() {
+                const resetButton = document.getElementById('resetButton');
+                resetButton.addEventListener('click', () => {
+                    this.gameMap = this.generateMap();
+                });
+            }
+
+            // Generate initial ecosystem map
+            generateMap() {
+                const map = [];
+                for (let i = 0; i < this.canvas.height / this.parameters.CELL_SIZE; i++) {
+                    const subMap = [];
+                    for (let j = 0; j < this.canvas.width / this.parameters.CELL_SIZE; j++) {
+                        subMap.push(this.generateItem());
+                    }
+                    map.push(subMap);
+                }
+                return map;
+            }
+
+            // Randomly generate ecosystem elements
+            generateItem() {
+                const randNum = Math.floor(Math.random() * 100) + 1;
+                if (randNum <= this.parameters.PROBA_COW_INIT) {
+                    return new Cow(this.parameters.COW_ENERGY_INIT);
+                }
+                if (randNum <= this.parameters.PROBA_COW_INIT + this.parameters.PROBA_GRASS_INIT) {
+                    return 1; // Grass
+                }
+                return 0; // Empty space
+            }
+
+            // Check available movement directions
+            checkFreePlace(y, x, direction) {
+                switch(direction) {
+                    case 0: // Up
+                        if (y === 0) return -1;
+                        if (this.gameMap[y-1][x] === 0) return 0;
+                        if (this.gameMap[y-1][x] === 1) return 1;
+                        if (this.gameMap[y-1][x] instanceof Cow) return 2;
+                        break;
+                    case 1: // Right
+                        if (x === this.gameMap[0].length - 1) return -1;
+                        if (this.gameMap[y][x+1] === 0) return 0;
+                        if (this.gameMap[y][x+1] === 1) return 1;
+                        if (this.gameMap[y][x+1] instanceof Cow) return 2;
+                        break;
+                    case 2: // Down
+                        if (y === this.gameMap.length - 1) return -1;
+                        if (this.gameMap[y+1][x] === 0) return 0;
+                        if (this.gameMap[y+1][x] === 1) return 1;
+                        if (this.gameMap[y+1][x] instanceof Cow) return 2;
+                        break;
+                    case 3: // Left
+                        if (x === 0) return -1;
+                        if (this.gameMap[y][x-1] === 0) return 0;
+                        if (this.gameMap[y][x-1] === 1) return 1;
+                        if (this.gameMap[y][x-1] instanceof Cow) return 2;
+                        break;
+                }
+            }
+
+            // Simulate ecosystem dynamics for one iteration
+            nextIteration() {
+                for (let y = 0; y < this.gameMap.length; y++) {
+                    for (let x = 0; x < this.gameMap[0].length; x++) {
+                        // Skip if not cow or grass
+                        if (!(this.gameMap[y][x] instanceof Cow) && this.gameMap[y][x] !== 1) {
+                            continue;
+                        }
+
+                        // Cow logic
+                        if (this.gameMap[y][x] instanceof Cow) {
+                            const cow = this.gameMap[y][x];
+
+                            // Reproduction
+                            if (cow.canMakeBaby(this.parameters.COW_ENERGY_TO_MAKE_BABY)) {
+                                const directionBaby = Math.floor(Math.random() * 4);
+                                const isFree = this.checkFreePlace(y, x, directionBaby);
+
+                                if (isFree === 0 || isFree === 1) {
+                                    switch(directionBaby) {
+                                        case 0: this.gameMap[y-1][x] = new Cow(this.parameters.COW_ENERGY_INIT); break;
+                                        case 1: this.gameMap[y][x+1] = new Cow(this.parameters.COW_ENERGY_INIT); break;
+                                        case 2: this.gameMap[y+1][x] = new Cow(this.parameters.COW_ENERGY_INIT); break;
+                                        case 3: this.gameMap[y][x-1] = new Cow(this.parameters.COW_ENERGY_INIT); break;
+                                    }
+                                }
+                            }
+
+                            // Movement and energy management
+                            cow.reduceEnergy(this.parameters.COW_LOSS_ENERGY_STEP);
+                            if (cow.noEnergy()) {
+                                this.gameMap[y][x] = 0;
+                                continue;
+                            }
+
+                            const direction = Math.floor(Math.random() * 4);
+                            const item = this.checkFreePlace(y, x, direction);
+
+                            // Move if not blocked or a cow
+                            if (item !== -1 && item !== 2) {
+                                if (item === 1) {
+                                    cow.increaseEnergy(this.parameters.COW_INCREASE_ENERGY_EAT);
+                                }
+
+                                switch(direction) {
+                                    case 0: this.gameMap[y-1][x] = cow; break;
+                                    case 1: this.gameMap[y][x+1] = cow; break;
+                                    case 2: this.gameMap[y+1][x] = cow; break;
+                                    case 3: this.gameMap[y][x-1] = cow; break;
+                                }
+                                this.gameMap[y][x] = 0;
+                            }
+                        }
+
+                        // Grass growth logic
+                        if (this.gameMap[y][x] === 1) {
+                            if (Math.random() * 100 <= this.parameters.PROBA_GRASS_GROW) {
+                                const direction = Math.floor(Math.random() * 4);
+                                const item = this.checkFreePlace(y, x, direction);
+
+                                if (item === 0) {
+                                    switch(direction) {
+                                        case 0: this.gameMap[y-1][x] = 1; break;
+                                        case 1: this.gameMap[y][x+1] = 1; break;
+                                        case 2: this.gameMap[y+1][x] = 1; break;
+                                        case 3: this.gameMap[y][x-1] = 1; break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Restart if only grass remains
+                if (this.checkIfOnlyGrass()) {
+                    this.gameMap = this.generateMap();
+                }
+            }
+
+            // Check if ecosystem is only grass
+            checkIfOnlyGrass() {
+                for (let y = 0; y < this.gameMap.length; y++) {
+                    for (let x = 0; x < this.gameMap[0].length; x++) {
+                        if (this.gameMap[y][x] !== 1) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // Render ecosystem on canvas
+            displayMap() {
+                this.ctx.fillStyle = 'black';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                for (let y = 0; y < this.gameMap.length; y++) {
+                    for (let x = 0; x < this.gameMap[0].length; x++) {
+                        if (this.gameMap[y][x] instanceof Cow) {
+                            this.ctx.fillStyle = 'white';
+                            this.ctx.fillRect(x * this.parameters.CELL_SIZE, y * this.parameters.CELL_SIZE, this.parameters.CELL_SIZE, this.parameters.CELL_SIZE);
+                        } else if (this.gameMap[y][x] === 1) {
+                            this.ctx.fillStyle = 'green';
+                            this.ctx.fillRect(x * this.parameters.CELL_SIZE, y * this.parameters.CELL_SIZE, this.parameters.CELL_SIZE, this.parameters.CELL_SIZE);
+                        }
+                    }
+                }
+            }
+
+            // Start simulation loop
+            startSimulation() {
+                this.simulationInterval = setInterval(() => {
+                    this.nextIteration();
+                    this.displayMap();
+                }, this.parameters.TICK);
+            }
+        }
+
+        // Initialize simulation when page loads
+        window.onload = () => {
+            new CowGrassSimulation();
+        };
+    </script>
+</body>
+</html>
